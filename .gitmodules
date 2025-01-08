@@ -1,0 +1,6 @@
+[submodule "lib/mongoose"]
+	path = lib/mongoose
+	url = https://github.com/cesanta/mongoose
+[submodule "lib/PicoLED"]
+	path = lib/PicoLED
+	url = https://github.com/ForsakenNGS/PicoLED

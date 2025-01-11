@@ -105,6 +105,8 @@ int main(){
 	MG_INFO(("Initialising application..."));
 	mg_http_listen(&mgr, HTTP_URL, fn, NULL);
 
+	mg_timer_add(&mgr, 500, MG_TIMER_REPEAT, blink_timer, &mgr);
+
 	MG_INFO(("Starting event loop"));
 	for (;;) {
 		mg_mgr_poll(&mgr, 10);

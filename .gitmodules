@@ -4,3 +4,6 @@
 [submodule "lib/PicoLED"]
 	path = lib/PicoLED
 	url = https://github.com/ForsakenNGS/PicoLED
+[submodule "lib/RPIPicoOnboardNVS"]
+	path = lib/RPIPicoOnboardNVS
+	url = https://github.com/jondurrant/RPIPicoOnboardNVS

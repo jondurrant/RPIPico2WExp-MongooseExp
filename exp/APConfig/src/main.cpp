@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <pico/stdlib.h>
 #include "pico/cyw43_arch.h"
+#include "hardware/watchdog.h"
 #include "FreeRTOS.h"
 #include <task.h>
 
@@ -60,6 +61,10 @@ const char ConfigSaved[]=
 
 #define BUF_LEN 2048
 char buf[BUF_LEN];
+
+void gpioCB(uint gpio, uint32_t events){
+	watchdog_enable(1, 1);
+}
 
 void setupDefaults(){
 	NVSHTML * nvs = NVSHTML::getInstance();
@@ -156,38 +161,42 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
 }
 
 static void mongoose(void *args) {
-  char nvsVals[NVS_MAX_VAL];
-  struct mg_mgr mgr;        // Initialise Mongoose event manager
-  mg_mgr_init(&mgr);        // and attach it to the interface
-  mg_log_set(MG_LL_DEBUG);  // Set log level
+	char nvsVals[NVS_MAX_VAL];
+	struct mg_mgr mgr;        // Initialise Mongoose event manager
+	mg_mgr_init(&mgr);        // and attach it to the interface
+	mg_log_set(MG_LL_DEBUG);  // Set log level
 
-  gpio_init(GP_WIZARD);
-  gpio_set_dir(GP_WIZARD, GPIO_IN);
-  gpio_pull_up(GP_WIZARD);
+	setupDefaults();
 
-  setupDefaults();
+	cyw43_arch_init();
 
-  cyw43_arch_init();
+	cyw43_arch_enable_sta_mode();
+	cyw43_arch_wifi_connect_blocking(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK);
 
-  cyw43_arch_enable_sta_mode();
-  cyw43_arch_wifi_connect_blocking(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK);
+	char *s = ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]));
+	printf("IP: %s\n", s);
 
-  char *s = ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]));
-  printf("IP: %s\n", s);
+	LEDAgent ledAgent;
+	ledAgent.start("LED", configMAX_PRIORITIES-2);
 
-  LEDAgent ledAgent;
-  ledAgent.start("LED", configMAX_PRIORITIES-2);
+	NVSHTML * nvs = NVSHTML::getInstance();
+	size_t len = NVS_MAX_VAL;
+	nvs->get_str ( NVS_SSID,  nvsVals, &len);
+	if ((len <2)  || ( gpio_get(GP_WIZARD) == 0)){
+		printf("Starting Config Wizard\n");
+		ledAgent.setSpeed(0.0);
+		ledAgent.setRGB(0xff, 0x00, 0x00);
+		Wizard wz;
+		wz.run( buf,  BUF_LEN);
+	}
 
-  NVSHTML * nvs = NVSHTML::getInstance();
-  size_t len = NVS_MAX_VAL;
-  nvs->get_str ( NVS_SSID,  nvsVals, &len);
-  if ((len <2)  || ( gpio_get(GP_WIZARD) == 0)){
-	  printf("Starting Config Wizard\n");
-	  ledAgent.setSpeed(0.0);
-	  ledAgent.setRGB(0xff, 0x00, 0x00);
-	  Wizard wz;
-	  wz.run( buf,  BUF_LEN);
-  }
+	gpio_set_irq_enabled_with_callback(
+	   GP_WIZARD,
+		 GPIO_IRQ_EDGE_FALL,
+		 true,
+		 gpioCB
+		 );
+
 
   /*
   cyw43_arch_enable_ap_mode (AP_SSID,  AP_PWD,  CYW43_AUTH_WPA2_AES_PSK);
@@ -219,8 +228,12 @@ static void mongoose(void *args) {
   (void) args;
 }
 
-int main(){
 
+
+int main(){
+   gpio_init(GP_WIZARD);
+   gpio_set_dir(GP_WIZARD, GPIO_IN);
+   gpio_pull_up(GP_WIZARD);
 
 	stdio_init_all();
 	sleep_ms(1000);
@@ -228,9 +241,6 @@ int main(){
 	printf("Go\n");
 
 
-	//ledStrip.setBrightness(64);
-	//ledStrip.fill( PicoLed::RGB(100, 0, 0) );
-	//ledStrip.show();
 
 	xTaskCreate(mongoose, "mongoose", 1024*8, 0, configMAX_PRIORITIES - 1, NULL);
 

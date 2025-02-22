@@ -24,6 +24,7 @@ extern "C"{
 
 #include "mongoose.h"
 #include "NVSHTML.h"
+#include "Wizard.h"
 
 #define AP_SSID "PICO2W"
 #define AP_PWD "DRJONEA2025"
@@ -39,6 +40,7 @@ char wifiSSID[80];
 char wifiPASS[80];
 
 
+#define NVS_MAX_VAL 80
 #define NVS_SSID "NVS_WIFI_SSID"
 #define NVS_PWD "NVS_WIFI__PWD"
 #define NVS_WIZARD_SSID "NVS_WIZARD_SSID"
@@ -165,6 +167,7 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
 }
 
 static void mongoose(void *args) {
+  char nvsVals[NVS_MAX_VAL];
   struct mg_mgr mgr;        // Initialise Mongoose event manager
   mg_mgr_init(&mgr);        // and attach it to the interface
   mg_log_set(MG_LL_DEBUG);  // Set log level
@@ -178,6 +181,15 @@ static void mongoose(void *args) {
 
   char *s = ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]));
   printf("IP: %s\n", s);
+
+  NVSHTML * nvs = NVSHTML::getInstance();
+  size_t len = NVS_MAX_VAL;
+  nvs->get_str ( NVS_SSID,  nvsVals, &len);
+  if (len <2){
+	  printf("Starting Config Wizard\n");
+	  Wizard wz;
+	  wz.run( buf,  BUF_LEN);
+  }
 
   /*
   cyw43_arch_enable_ap_mode (AP_SSID,  AP_PWD,  CYW43_AUTH_WPA2_AES_PSK);

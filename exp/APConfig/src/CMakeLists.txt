@@ -4,6 +4,7 @@ add_executable(${NAME}
 		Agent.cpp
 		LEDAgent.cpp
 		NVSHTML.cpp
+		Wizard.cpp
 		../dhcpserver/dhcpserver.c
         ../dnsserver/dnsserver.c
         )
@@ -22,10 +23,12 @@ target_link_libraries(${NAME}
     hardware_spi 
     pico_rand   
     hardware_flash 
+    hardware_watchdog
     pico_bootrom
     mongoose
     PicoLed
     onboard_nvs
+    
     )
 
 # create map/bin/hex file etc.

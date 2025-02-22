@@ -39,8 +39,15 @@ char wifiSSID[80];
 char wifiPASS[80];
 
 
-#define NVS_SSID "NVS_SSID"
-#define NVS_PWD "NVS_PWD"
+#define NVS_SSID "NVS_WIFI_SSID"
+#define NVS_PWD "NVS_WIFI__PWD"
+#define NVS_WIZARD_SSID "NVS_WIZARD_SSID"
+#define NVS_WIZARD_PWD "NVS_WIZARD__PWD"
+#define NVS_RED "NVS_LEDS1_RED"
+#define NVS_GRN "NVS_LEDS2_GRN"
+#define NVS_BLU "NVS_LEDS3_BLU"
+#define NVS_SPEED "NVS_LEDS4_SPEED"
+#define NVS_BIDIRECT "NVS_LEDS4_BI"
 
 const char ConfigSaved[]=
 		"<html><body>"
@@ -48,7 +55,7 @@ const char ConfigSaved[]=
 		"</body></html>";
 
 
-#define BUF_LEN 1024
+#define BUF_LEN 2048
 char buf[BUF_LEN];
 
 void setupDefaults(){
@@ -63,10 +70,39 @@ void setupDefaults(){
 		 nvs->set_pwd ( NVS_PWD,  "");
 	}
 
+
+	if (!nvs->contains(NVS_WIZARD_SSID)){
+		 nvs->set_str ( NVS_WIZARD_SSID,  AP_SSID);
+	}
+
+	if (!nvs->contains(NVS_WIZARD_PWD)){
+		 nvs->set_pwd ( NVS_WIZARD_PWD,  AP_PWD);
+	}
+
+
+	if (!nvs->contains(NVS_RED)){
+		 nvs->set_u8 ( NVS_RED,  0xFF);
+	}
+
+
+	if (!nvs->contains(NVS_GRN)){
+		 nvs->set_u8 ( NVS_GRN,  0xFF);
+	}
+
+	if (!nvs->contains(NVS_BLU)){
+		 nvs->set_u8 ( NVS_BLU,  0xFF);
+	}
+
+	if (!nvs->contains(NVS_SPEED)){
+		 nvs->set_double ( NVS_SPEED , 1.0);
+	}
+
+	if (!nvs->contains(NVS_BIDIRECT)){
+		 nvs->set_bool( NVS_BIDIRECT , true);
+	}
+
 	nvs->commit();
 
-	nvs->toHTML(buf, BUF_LEN);
-	printf("HTML:\n%s\n", buf);
 }
 
 

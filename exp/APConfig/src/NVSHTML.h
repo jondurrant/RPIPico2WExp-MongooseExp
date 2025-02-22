@@ -12,7 +12,7 @@
 #include "NVSOnboard.h"
 #include "mongoose.h"
 
-#define NVS_STR_LEN 80
+#define NVS_STR_LEN 256
 
 class NVSHTML  : public NVSOnboard {
 public:
@@ -53,18 +53,43 @@ protected:
 			const char *val,
 			size_t *remLen
 			);
+	virtual char * html_input_num(
+			char *dest,
+			const char * key,
+			const int64_t val,
+			size_t *remLen,
+			int64_t min = 0,
+			int64_t max = 0
+			);
 	virtual char *html_label(
 			char *dest,
 			const char * key,
 			size_t *remLen
 		);
+	virtual char * html_input_double(
+			char *dest,
+			const char * key,
+			const double val,
+			size_t *remLen
+			);
+	virtual char * html_input_bool(
+			char *dest,
+			const char * key,
+			const bool val,
+			size_t *remLen
+			);
+
 
 	virtual char * htmlStart(char *dest,  size_t* remLen);
 	virtual char * htmlEnd(char *dest,  size_t* remLen);
 
 
 	virtual void updateKey(const char * key,  nvs_type_t type, const struct mg_str *var);
-
+	virtual void  updateKeyNum(
+			const char * key,
+			nvs_type_t type,
+			const char * txt
+			);
 
 private:
 	static NVSHTML * pSingleton;

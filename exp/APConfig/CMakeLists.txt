@@ -9,7 +9,7 @@ include("$ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake")
 
 
 project(${NAME} C CXX ASM)
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_CXX_STANDARD 26)
 set(PICO_CXX_ENABLE_EXCEPTIONS 1)
 set(PICO_CXX_ENABLE_RTTI 1)

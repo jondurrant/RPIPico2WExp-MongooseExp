@@ -39,6 +39,7 @@ extern "C"{
 char wifiSSID[80];
 char wifiPASS[80];
 
+#define GP_WIZARD 2
 
 #define NVS_MAX_VAL 80
 #define NVS_SSID "NVS_WIFI_SSID"
@@ -141,18 +142,6 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
 			}
 		}  else  if (mg_match(hm->uri, mg_str("/hello"), NULL)){
 			mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": %m}", MG_ESC("Hello World"));
-		} else  if (mg_match(hm->uri, mg_str("/setConfig"), NULL)){
-			NVSHTML::getInstance()->updateQuery(&hm->query);
-			mg_http_reply(c, 200,
-					"Content-Type: text/html\r\n",
-					ConfigSaved
-					);
-		} else  if (mg_match(hm->uri, mg_str("/config"), NULL)){
-			NVSHTML::getInstance()->toHTML(buf, BUF_LEN);
-			mg_http_reply(c, 200,
-					"Content-Type: text/html\r\n",
-					buf
-					);
 		} else {
 			struct mg_http_serve_opts opts = {
 			        .root_dir = "/web",
@@ -172,6 +161,10 @@ static void mongoose(void *args) {
   mg_mgr_init(&mgr);        // and attach it to the interface
   mg_log_set(MG_LL_DEBUG);  // Set log level
 
+  gpio_init(GP_WIZARD);
+  gpio_set_dir(GP_WIZARD, GPIO_IN);
+  gpio_pull_up(GP_WIZARD);
+
   setupDefaults();
 
   cyw43_arch_init();
@@ -182,11 +175,16 @@ static void mongoose(void *args) {
   char *s = ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]));
   printf("IP: %s\n", s);
 
+  LEDAgent ledAgent;
+  ledAgent.start("LED", configMAX_PRIORITIES-2);
+
   NVSHTML * nvs = NVSHTML::getInstance();
   size_t len = NVS_MAX_VAL;
   nvs->get_str ( NVS_SSID,  nvsVals, &len);
-  if (len <2){
+  if ((len <2)  || ( gpio_get(GP_WIZARD) == 0)){
 	  printf("Starting Config Wizard\n");
+	  ledAgent.setSpeed(0.0);
+	  ledAgent.setRGB(0xff, 0x00, 0x00);
 	  Wizard wz;
 	  wz.run( buf,  BUF_LEN);
   }
@@ -208,8 +206,7 @@ static void mongoose(void *args) {
   dns_server_init(&dns_server, &gw);
   */
 
-  LEDAgent ledAgent;
-  ledAgent.start("LED", configMAX_PRIORITIES-2);
+
 
   MG_INFO(("Initialising application..."));
   mg_http_listen(&mgr, HTTP_URL, fn, &ledAgent);

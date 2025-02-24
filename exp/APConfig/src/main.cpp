@@ -1,8 +1,13 @@
 /*
  * main.cpp
  *
- * LED Control
- * Provide a AP with Credentials below
+ * LED Control of WS2812B LEDs on GP15
+ *
+ * Switch on GP02 to enter configuration Wizard mode.
+ * Single push results in Amber LED display for update config Wizard
+ * Long push results in RED LED display for Factory reset
+ *
+ * In Config Wizard Mode Provide a AP with Credentials below
  * Listen on port 80 IP 192.168.4.1
  * URL: http://mip/api/led?color=FFFFFF
  * Where FFFFFF is color to set the LED.
@@ -27,20 +32,15 @@ extern "C"{
 #include "NVSHTML.h"
 #include "Wizard.h"
 
+#define GP_WIZARD 2
+
 #define AP_SSID "PICO2W"
 #define AP_PWD "DRJONEA2025"
-
-
-
 #define HTTP_URL "http://0.0.0.0:80"
 
-
-
-
-char wifiSSID[80];
-char wifiPASS[80];
-
-#define GP_WIZARD 2
+#define WIFI_LEN 80
+char wifiSSID[WIFI_LEN];
+char wifiPWD[WIFI_LEN];
 
 #define NVS_MAX_VAL 80
 #define NVS_SSID "NVS_WIFI_SSID"
@@ -52,20 +52,17 @@ char wifiPASS[80];
 #define NVS_BLU "NVS_LEDS3_BLU"
 #define NVS_SPEED "NVS_LEDS4_SPEED"
 #define NVS_BIDIRECT "NVS_LEDS4_BI"
-
-const char ConfigSaved[]=
-		"<html><body>"
-		"<h1>Config Saved</h1>"
-		"</body></html>";
+#define NVS_CONFIG "NVS_CONFIG"
 
 
 #define BUF_LEN 2048
 char buf[BUF_LEN];
 
-void gpioCB(uint gpio, uint32_t events){
-	watchdog_enable(1, 1);
-}
 
+/***
+ * Setup defaults in the NVS if they are not already there
+ * Used to do factory reset
+ */
 void setupDefaults(){
 	NVSHTML * nvs = NVSHTML::getInstance();
 	nvs_err_t res;
@@ -113,7 +110,11 @@ void setupDefaults(){
 
 }
 
-
+/***
+ * Change the LEDs colour from the Mongoose form
+ * @param hex
+ * @param la
+ */
 void ledColor(char * hex, LEDAgent * la){
 	int rgb;
 	if (hex[0] == '#'){
@@ -130,7 +131,12 @@ void ledColor(char * hex, LEDAgent * la){
 	}
 }
 
-
+/***
+ * Mongoose callback function
+ * @param c
+ * @param ev
+ * @param ev_data
+ */
 static void fn(struct mg_connection *c, int ev, void *ev_data) {
 
 	if (ev == MG_EV_HTTP_MSG){
@@ -160,77 +166,113 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
 
 }
 
+/***
+ * Start a Mongoose thread
+ * May be either the Config Wizard or normal operations
+ * @param args
+ */
 static void mongoose(void *args) {
 	char nvsVals[NVS_MAX_VAL];
 	struct mg_mgr mgr;        // Initialise Mongoose event manager
 	mg_mgr_init(&mgr);        // and attach it to the interface
 	mg_log_set(MG_LL_DEBUG);  // Set log level
 
+	//IF FACTORY RESET HELD DOWN
+	NVSHTML * nvs;
+	if (gpio_get(GP_WIZARD) == 0){
+		nvs = NVSHTML::getInstance(true);
+	} else {
+		nvs = NVSHTML::getInstance();
+	}
+
+	//Initialise defaults if needed
 	setupDefaults();
 
+	//Init Wifi Controller
 	cyw43_arch_init();
 
-	cyw43_arch_enable_sta_mode();
-	cyw43_arch_wifi_connect_blocking(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK);
-
-	char *s = ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]));
-	printf("IP: %s\n", s);
-
+	//Start the LED display
 	LEDAgent ledAgent;
 	ledAgent.start("LED", configMAX_PRIORITIES-2);
 
-	NVSHTML * nvs = NVSHTML::getInstance();
+	//Check if we should run the Config Wizard
+	//Do this if the NVS_SSID is not set or
+	//if the NVS_CONFIG key is in the NVS
 	size_t len = NVS_MAX_VAL;
 	nvs->get_str ( NVS_SSID,  nvsVals, &len);
-	if ((len <2)  || ( gpio_get(GP_WIZARD) == 0)){
+	if ((len <2)  ||  nvs->contains(NVS_CONFIG) ){
 		printf("Starting Config Wizard\n");
+		size_t wlen = WIFI_LEN;
+		nvs->get_str ( NVS_WIZARD_SSID,   wifiSSID, &wlen);
+		wlen = WIFI_LEN;
+		nvs->get_pwd ( NVS_WIZARD_PWD,   wifiPWD, &wlen);
+		nvs->erase_key(NVS_CONFIG);
+		printf("Local AP %s:%s\n", wifiSSID, wifiPWD);
+
 		ledAgent.setSpeed(0.0);
-		ledAgent.setRGB(0xff, 0x00, 0x00);
+		//If no NVS_SSDI then we are in factory reset mode
+		if ((len < 2)) {
+			ledAgent.setRGB(0xff, 0x00, 0x00);
+		} else {
+			ledAgent.setRGB(0xff, 0xff, 0x00);
+		}
 		Wizard wz;
+		wz.startAP(wifiSSID,  wifiPWD);
 		wz.run( buf,  BUF_LEN);
+		//Will never get here
+		for(;;){
+			//NOP
+		}
 	}
 
-	gpio_set_irq_enabled_with_callback(
-	   GP_WIZARD,
-		 GPIO_IRQ_EDGE_FALL,
-		 true,
-		 gpioCB
-		 );
+	//Normal Operation!
 
+	//Set LED colour from NVS Config
+	uint8_t r,g,b;
+	nvs->get_u8(NVS_RED, &r);
+	nvs->get_u8(NVS_GRN, &g);
+	nvs->get_u8(NVS_BLU, &b);
+	ledAgent.setRGB(r, g,b);
 
-  /*
-  cyw43_arch_enable_ap_mode (AP_SSID,  AP_PWD,  CYW43_AUTH_WPA2_AES_PSK);
+	//Set LED speed from NVS Config
+	double sp;
+	nvs->get_double(NVS_SPEED, &sp);
+	ledAgent.setSpeed(sp);
 
-  ip4_addr_t mask;
-  ip4_addr_t gw;
-  IP4_ADDR(ip_2_ip4(&gw), 192, 168, 4, 1);
-  IP4_ADDR(ip_2_ip4(&mask), 255, 255, 255, 0);
+	//Join Wifi using credentials in NVS
+	cyw43_arch_enable_sta_mode();
+	size_t wlen = WIFI_LEN;
+	nvs->get_str ( NVS_SSID,   wifiSSID, &wlen);
+	wlen = WIFI_LEN;
+	nvs->get_pwd ( NVS_PWD,   wifiPWD, &wlen);
+	//printf("Join AP %s:%s\n", wifiSSID, wifiPWD);
+	cyw43_arch_wifi_connect_blocking(wifiSSID, wifiPWD, CYW43_AUTH_WPA2_AES_PSK);
+	char *s = ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]));
+	printf("IP: %s\n", s);
 
-  // Start the dhcp server
-  dhcp_server_t dhcp_server;
-  dhcp_server_init(&dhcp_server, &gw, &mask);
-
-  // Start the dns server
-  dns_server_t dns_server;
-  dns_server_init(&dns_server, &gw);
-  */
-
-
-
+  //Run Mongoose
   MG_INFO(("Initialising application..."));
   mg_http_listen(&mgr, HTTP_URL, fn, &ledAgent);
 
   MG_INFO(("Starting event loop"));
   for (;;) {
     mg_mgr_poll(&mgr, 10);
+
+    //Poll the wizard switch and if needed reboot into config mode
+    if (gpio_get(GP_WIZARD) == 0){
+    	nvs->set_bool(NVS_CONFIG, true);
+    	nvs->commit();
+    	watchdog_enable(1, 1);
+    }
   }
 
-  (void) args;
+
 }
 
 
 
 int main(){
+   //Setup the Config Wizard Switch
    gpio_init(GP_WIZARD);
    gpio_set_dir(GP_WIZARD, GPIO_IN);
    gpio_pull_up(GP_WIZARD);
@@ -241,16 +283,12 @@ int main(){
 	printf("Go\n");
 
 
-
+	//Add mongoose task and run scheduler
 	xTaskCreate(mongoose, "mongoose", 1024*8, 0, configMAX_PRIORITIES - 1, NULL);
-
-	  vTaskStartScheduler();  // This blocks
-
-
+	vTaskStartScheduler();
 
 	for (;;){
-		printf("Stuff\n");
-		sleep_ms(3000);
+		//Never reached
 	}
 
 

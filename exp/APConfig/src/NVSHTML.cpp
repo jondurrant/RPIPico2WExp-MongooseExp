@@ -8,6 +8,8 @@
 #include "NVSHTML.h"
 #include <inttypes.h>
 
+#define BLANK_PWD "########"
+
 NVSHTML * NVSHTML::pSingleton = NULL;
 
 NVSHTML::NVSHTML(bool cleanNVS): NVSOnboard(cleanNVS) {
@@ -308,7 +310,9 @@ char * NVSHTML::html_input_pwd(
 				const char *val,
 				size_t *remLen
 				){
-	const char txt[] = "<input type=\"password\" id=\"%s\" name=\"%s\"  value=\"########\"><br>\n";
+	const char txt[] = "<input type=\"password\" id=\"%s\" name=\"%s\"  value=\""
+			BLANK_PWD
+			"\"><br>\n";
 	char buf[NVS_STR_LEN];
 	char * res = dest;
 
@@ -466,7 +470,9 @@ void NVSHTML::updateKey(
 			set_str (key,  buf);
 		}
 		if (type == NVS_TYPE_PWD){
-			set_pwd (key,  buf);
+			if (strcmp(BLANK_PWD, buf) != 0){
+				set_pwd (key,  buf);
+			}
 		}
 		if (type <= NVS_TYPE_I64){
 			updateKeyNum(key, type, buf);

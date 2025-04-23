@@ -35,18 +35,22 @@ Wizard::~Wizard() {
 
 
 void Wizard::startAP(const char *ssid, const char *pwd){
-	  cyw43_arch_enable_ap_mode (ssid,  pwd,  CYW43_AUTH_WPA2_AES_PSK);
+	cyw43_arch_enable_ap_mode (
+		ssid,  
+		pwd,  
+		CYW43_AUTH_WPA2_AES_PSK
+	);
 
-	  ip4_addr_t mask;
-	  ip4_addr_t gw;
-	  IP4_ADDR(ip_2_ip4(&gw), 192, 168, 4, 1);
-	  IP4_ADDR(ip_2_ip4(&mask), 255, 255, 255, 0);
+	ip4_addr_t mask;
+	ip4_addr_t gw;
+	IP4_ADDR(ip_2_ip4(&gw), 192, 168, 4, 1);
+	IP4_ADDR(ip_2_ip4(&mask), 255, 255, 255, 0);
 
-	  // Start the dhcp server
-	  dhcp_server_init(&xDhcpServer, &gw, &mask);
+	// Start the dhcp server
+	dhcp_server_init(&xDhcpServer, &gw, &mask);
 
-	  // Start the dns server
-	  dns_server_init(&xDnsServer, &gw);
+	// Start the dns server
+	dns_server_init(&xDnsServer, &gw);
 }
 
 void Wizard::run(char *buf, size_t bufLen){

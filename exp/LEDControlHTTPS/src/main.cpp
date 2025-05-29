@@ -1,0 +1,271 @@
+/*
+ * main.cpp
+ *
+ * LED Control
+ * Connect to WIFI AP defined by WIFI_SSID and WIFI_PASS (set in CMake)
+ * Listen on port 80
+ * URL: http://mip/api/led
+ * POST: JSON of form {red: 100, grn: 100, blu:100 }
+ *  Created on: 23-Apr-2025
+ *      Author: jondurrant
+ */
+
+#include <cstdio>
+#include <pico/stdlib.h>
+#include "pico/cyw43_arch.h"
+#include "FreeRTOS.h"
+#include <task.h>
+
+#include <PicoLed.hpp>
+
+#include "mongoose.h"
+#include "keys.h"
+
+
+
+#define HTTP_URL "http://0.0.0.0:80"
+#define HTTPS_URL "https://0.0.0.0:443"
+
+#define LED_PIN 15
+#define LED_LENGTH 11
+
+auto ledStrip = PicoLed::addLeds<PicoLed::WS2812B>(pio0, 0, LED_PIN, LED_LENGTH, PicoLed::FORMAT_GRB);
+
+
+char wifiSSID[80];
+char wifiPASS[80];
+
+void runTimeStats(   ){
+	TaskStatus_t *pxTaskStatusArray;
+	volatile UBaseType_t uxArraySize, x;
+	unsigned long ulTotalRunTime;
+
+
+   // Get number of takss
+   uxArraySize = uxTaskGetNumberOfTasks();
+   printf("Number of tasks %d\n", uxArraySize);
+
+   //Allocate a TaskStatus_t structure for each task.
+   pxTaskStatusArray = (TaskStatus_t *)pvPortMalloc( uxArraySize * sizeof( TaskStatus_t ) );
+
+   if( pxTaskStatusArray != NULL ){
+      // Generate raw status information about each task.
+      uxArraySize = uxTaskGetSystemState( pxTaskStatusArray,
+                                 uxArraySize,
+                                 &ulTotalRunTime );
+
+	 // Print stats
+	 for( x = 0; x < uxArraySize; x++ )
+	 {
+		 printf("Task: %d \t cPri:%d \t bPri:%d \t hw:%d \t%s\n",
+				pxTaskStatusArray[ x ].xTaskNumber ,
+				pxTaskStatusArray[ x ].uxCurrentPriority ,
+				pxTaskStatusArray[ x ].uxBasePriority ,
+				pxTaskStatusArray[ x ].usStackHighWaterMark ,
+				pxTaskStatusArray[ x ].pcTaskName
+				);
+	 }
+
+
+      // Free array
+      vPortFree( pxTaskStatusArray );
+   } else {
+	   printf("Failed to allocate space for stats\n");
+   }
+
+   //Get heap allocation information
+   HeapStats_t heapStats;
+   vPortGetHeapStats(&heapStats);
+   printf("HEAP avl: %d, blocks %d, alloc: %d, free: %d\n",
+		   heapStats.xAvailableHeapSpaceInBytes,
+		   heapStats.xNumberOfFreeBlocks,
+		   heapStats.xNumberOfSuccessfulAllocations,
+		   heapStats.xNumberOfSuccessfulFrees
+		   );
+}
+
+
+void ledColor(long red, long grn, long blu){
+	ledStrip.fill( PicoLed::RGB(red, grn, blu) );
+	ledStrip.show();
+}
+
+
+static void fn(struct mg_connection *c, int ev, void *ev_data) {
+
+	if (ev == MG_EV_HTTP_MSG){
+		struct mg_http_message *hm = (struct mg_http_message *) ev_data;  // Parsed HTTP request
+		if (mg_match(hm->uri, mg_str("/api/led"), NULL)) {              // REST API call?
+
+			printf("Head: %.*s\n",
+					hm->head.len,
+					hm->head.buf);
+
+			printf("Body: %.*s\n",
+					hm->body.len,
+					hm->body.buf
+					);
+
+
+			long red = mg_json_get_long(hm->body, "$.red", -1);
+			long grn = mg_json_get_long(hm->body, "$.grn", -1);
+			long blu = mg_json_get_long(hm->body, "$.blu", -1);
+
+
+			if (
+					((red >= 0) && (red < 256)) &&
+					((grn >= 0) && (grn < 256)) &&
+					((blu >= 0) && (blu < 256))
+				){
+				ledColor(red, grn, blu);
+				mg_http_reply(c, 200, "", "{%m:%m}\n", MG_ESC("status"), MG_ESC("OK"));
+			} else {
+				printf("Error red: %d, grn: %d, blu: %d\n", red, grn, blu);
+				mg_http_reply(c, 200, "", "{%m:%m}\n", MG_ESC("status"), MG_ESC("ERROR"));
+			}
+		} else {
+			printf("Unknown request\n");
+		}
+	}
+
+}
+
+static void tlsFn(struct mg_connection *c, int ev, void *ev_data) {
+
+	//printf("**********************\n");
+	//printf("TLS CB %d\n", ev);
+	//printf("**********************\n");
+
+
+	 if (ev == MG_EV_ACCEPT) {
+	    struct mg_tls_opts opts = {
+//    		  .ca = mg_str(s_tls_ca),
+	    		.cert = mg_str(s_tls_cert),
+	    		.key = mg_str(s_tls_key)
+	    };
+	    mg_tls_init(c, &opts);
+	    printf("Init mem\n");
+		runTimeStats();
+
+	  }
+
+	 if (ev == MG_EV_TLS_HS){
+		 printf("TLS Handshake complete (%d)\n", ev);
+	 }
+	 if (ev == MG_EV_CLOSE) {
+		 mg_tls_free(c);
+		 printf("TLS Free\n");
+		runTimeStats();
+	 }
+
+	if (ev == MG_EV_HTTP_MSG){
+		struct mg_http_message *hm = (struct mg_http_message *) ev_data;  // Parsed HTTP request
+		if (mg_match(hm->uri, mg_str("/api/led"), NULL)) {              // REST API call?
+
+			printf("Head: %.*s\n",
+					hm->head.len,
+					hm->head.buf);
+
+			printf("Body: %.*s\n",
+					hm->body.len,
+					hm->body.buf
+					);
+
+			long red = mg_json_get_long(hm->body, "$.red", -1);
+			long grn = mg_json_get_long(hm->body, "$.grn", -1);
+			long blu = mg_json_get_long(hm->body, "$.blu", -1);
+
+
+			if (
+					((red >= 0) && (red < 256)) &&
+					((grn >= 0) && (grn < 256)) &&
+					((blu >= 0) && (blu < 256))
+				){
+				ledColor(red, grn, blu);
+				mg_http_reply(c, 200, "", "{%m:%m}\n", MG_ESC("status"), MG_ESC("OK"));
+			} else {
+				printf("Error red: %d, grn: %d, blu: %d\n", red, grn, blu);
+				mg_http_reply(c, 200, "", "{%m:%m}\n", MG_ESC("status"), MG_ESC("ERROR"));
+			}
+		} else {
+			mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": %m}", MG_ESC("Hello World"));
+			printf("Unknown request\n");
+		}
+	}
+
+
+
+}
+
+
+static void mongoose(void *args) {
+  struct mg_mgr mgr;        // Initialise Mongoose event manager
+  mg_mgr_init(&mgr);        // and attach it to the interface
+  mg_log_set(MG_LL_DEBUG);  // Set log level
+
+  cyw43_arch_init();
+  cyw43_arch_enable_sta_mode();
+  int r =-1;
+  uint8_t attempts = 0;
+  while (r < 0){
+    attempts++;
+	r = cyw43_arch_wifi_connect_timeout_ms(
+			WIFI_SSID,
+			WIFI_PASS,
+			CYW43_AUTH_WPA2_AES_PSK,
+			60000);
+
+	if (r){
+		printf("Failed to join AP.\n");
+		if (attempts >= 3){
+			return ;
+		}
+		vTaskDelay(2000);
+	}
+  }
+
+
+  printf("IP Address: %s\n",
+		  ipaddr_ntoa(netif_ip4_addr(&cyw43_state.netif[0]))
+		  );
+
+  MG_INFO(("Initialising application..."));
+  mg_http_listen(&mgr, HTTP_URL, fn, NULL);
+  mg_http_listen(&mgr, HTTPS_URL, tlsFn, NULL);
+
+  MG_INFO(("Starting event loop"));
+  for (;;) {
+    mg_mgr_poll(&mgr, 10);
+  }
+
+  (void) args;
+}
+
+int main(){
+
+
+	stdio_init_all();
+	sleep_ms(1000);
+
+	printf("Go\n");
+
+	ledStrip.setBrightness(64);
+	ledStrip.fill( PicoLed::RGB(100, 0, 0) );
+	ledStrip.show();
+
+	xTaskCreate(mongoose, "mongoose", 1024*12, 0, configMAX_PRIORITIES - 1, NULL);
+
+	  vTaskStartScheduler();  // This blocks
+
+
+
+	for (;;){
+		printf("Stuff\n");
+		sleep_ms(3000);
+	}
+
+
+
+}
+
+

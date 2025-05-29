@@ -7,3 +7,6 @@
 [submodule "lib/RPIPicoOnboardNVS"]
 	path = lib/RPIPicoOnboardNVS
 	url = https://github.com/jondurrant/RPIPicoOnboardNVS
+[submodule "lib/wolfssl"]
+	path = lib/wolfssl
+	url = https://github.com/wolfSSL/wolfssl
